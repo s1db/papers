@@ -1,0 +1,642 @@
+\documentclass[runningheads]{llncs}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{microtype}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{cleveref}
+\usepackage{cite}
+\usepackage{algorithm}
+\usepackage[noend]{algorithmic}
+
+\DeclareMathOperator{\vars}{vars}
+\DeclareMathOperator{\expn}{exp}
+\DeclareMathOperator{\ite}{ite}
+\newcommand{\Bool}{\{\bot,\top\}}
+\newcommand{\ExpRes}{\forall\text{-}\mathrm{Exp}\text{+}\mathrm{Res}}
+\newcommand{\PG}{\mathrm{PG}}
+
+\begin{document}
+
+\title{DualCheck: Certificates and Skolem Strategies for Expansion-Based QBF Solving}
+\titlerunning{DualCheck: Certificates and Skolem Strategies for Expansion-Based QBF Solving}
+
+\author{Sidhant Bhavnani\orcidID{0000-0000-0000-0000}}
+\authorrunning{S. Bhavnani}
+
+
+\maketitle
+
+\begin{abstract}
+    % Expansion-based solving is a leading paradigm for quantified Boolean formulas (QBFs), yet certifying solver results has suffered from a fundamental asymmetry: while refutations of false QBFs admit direct certification in the $\ExpRes$ proof system, certifying true QBFs has remained an open challenge due to the clausal disruption introduced by structure-preserving definitional transformations.
+    % In this work, we present \emph{DualCheck}, establishing a unified proof system and certification framework for expansion-based QBF solving across both polarities, with a primary theoretical focus on the true case.
+    % We show that dual expansion solving is fundamentally universal expansion on the Plaisted--Greenbaum negation $\PG(\neg\Phi)$, prove that all dual clauses are valid $\ExpRes$ axioms, and demonstrate that winning Skolem strategies can be extracted by definition substitution on interpolated Herbrand strategies, with formal proofs of admissibility and semantic falsification of the negation.
+    % DualCheck provides an independent certificate checker and strategy synthesizer, completing the certification landscape for expansion-based solving.
+    % \keywords{Quantified Boolean Formulas \and Proof Certification \and Expansion-Based Solving \and Strategy Extraction.}
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+% Placeholder for Section 1: Introduction
+
+\section{Preliminaries and Background}
+\label{sec:preliminaries}
+
+
+\subsection{Quantified Boolean Formulas}
+\label{subsec:qbf}
+
+A \emph{quantified Boolean formula} (QBF) in prenex conjunctive normal form (PCNF) is defined as $\Phi = \Pi.\phi$, where $\Pi = Q_1 v_1 \dots Q_n v_n$ is the \emph{quantifier prefix} with $Q_i \in \{\forall, \exists\}$, and $\phi$ is the \emph{matrix}, consisting of a conjunction of clauses $\{C_1, \dots, C_m\}$.
+The prefix $\Pi$ establishes a strict linear order $<_\Pi$ on the set of propositional variables $V_\Phi \coloneqq \{v_1, \dots, v_n\}$.
+The variable set $V_\Phi$ is partitioned into existential variables $E_\Phi \coloneqq \{v_i \mid Q_i = \exists\}$ and universal variables $U_\Phi \coloneqq \{v_i \mid Q_i = \forall\}$, such that $V_\Phi = E_\Phi \cup U_\Phi$.
+Throughout this paper, we assume closed formulas without free variables.
+
+For any variable $v \in V_\Phi$, its \emph{dependency domain} under prefix $\Pi$ is the set of preceding variables:
+\begin{equation}
+    D_\Pi(v) \;\coloneqq\; \{w \in V_\Phi \mid w <_\Pi v\} .
+\end{equation}
+An \emph{assignment} $\tau$ over a set of variables $V$ is a function $\tau : V \to \Bool$.
+For any subset $W \subseteq V$, the \emph{restriction} of $\tau$ to $W$ is denoted by $\tau|_W : W \to \Bool$, where $\tau|_W(v) = \tau(v)$ for all $v \in W$.
+For a variable $v \in V_\Phi$, we write $\tau|_{<_\Pi v} \coloneqq \tau|_{D_\Pi(v) \cap V}$ for the restriction of $\tau$ to the variables preceding $v$ under the prefix order $<_\Pi$.
+
+We denote by $\vars(\cdot)$ the set of variables occurring in a literal, clause, or formula.
+For each clause $C \in \phi$, we partition its literals into existential and universal subclauses:
+\begin{equation}
+    C \;=\; C_E \lor C_U , \qquad \vars(C_E) \subseteq E_\Phi, \quad \vars(C_U) \subseteq U_\Phi .
+\end{equation}
+
+The truth value of a closed QBF is defined by recursively expanding quantifiers from innermost to outermost.
+Let $\phi_n \coloneqq \phi$ and, for $1 \leq i \leq n$, define:
+\begin{equation}
+    \phi_{i-1} \;\coloneqq\;
+    \begin{cases}
+        \phi_i[v_i / \top] \;\land\; \phi_i[v_i / \bot] & \text{if } Q_i = \forall,  \\[2pt]
+        \phi_i[v_i / \top] \;\lor\;  \phi_i[v_i / \bot] & \text{if } Q_i = \exists .
+    \end{cases}
+\end{equation}
+The resulting formula $\phi_0$ contains no variables; $\Phi$ is \emph{true} if $\phi_0 \equiv \top$ and \emph{false} otherwise.
+
+For a quantifier $Q \in \{\forall, \exists\}$, let $\overline{Q}$ denote its dual quantifier ($\overline{\forall} = \exists$ and $\overline{\exists} = \forall$).
+The \emph{negation} of a PCNF formula $\Phi = \Pi.\phi$ is the prenex disjunctive normal form (PDNF) formula:
+\begin{equation}
+    \neg\Phi \;\coloneqq\; \overline{\Pi}.\neg\phi ,
+    \qquad \overline{\Pi} \;\coloneqq\; \overline{Q}_1 v_1 \dots \overline{Q}_n v_n ,
+    \qquad \neg\phi \;\equiv\; \bigvee_{C \in \phi} \neg C .
+\end{equation}
+Under negation, quantifier roles invert: $U_{\neg\Phi} = E_\Phi$ and $E_{\neg\Phi} = U_\Phi$.
+Semantically, $\neg\Phi$ is true if and only if $\Phi$ is false.
+
+
+\subsection{QBF Strategies}
+\label{subsec:strategies}
+
+
+\begin{definition}[Strategies]
+    \label{def:strategies}
+    Let $\Phi = \Pi.\phi$ be a PCNF QBF.
+    An \emph{admissible strategy} for a quantified variable set $X \in \{E_\Phi, U_\Phi\}$ is a tuple of Boolean functions $f = (f_x)_{x \in X}$ such that each $f_x$ depends on preceding variables in the prefix:
+    \begin{equation}
+        \vars(f_x) \;\subseteq\; D_\Pi(x) .
+    \end{equation}
+    We write $\phi[f]$ for the propositional formula obtained by sequentially substituting $f_x$ for $x \in X$ in reverse prefix order.
+    \begin{itemize}
+        \item An admissible strategy $s = (s_e)_{e \in E_\Phi}$ is a \emph{winning Skolem strategy} for $\Phi$ if $\phi[s] \equiv \top$.
+        \item An admissible strategy $h = (h_u)_{u \in U_\Phi}$ is a \emph{winning Herbrand strategy} for $\Phi$ if $\phi[h] \equiv \bot$.
+    \end{itemize}
+\end{definition}
+
+A closed QBF $\Phi$ is true if and only if it admits a winning Skolem strategy, and false if and only if it admits a winning Herbrand strategy~\cite{beyersdorff2021qbf}.
+
+\begin{remark}[Strategy Duality under Negation]
+    \label{rem:duality}
+    Because quantifier types invert under negation ($U_{\neg\Phi} = E_\Phi$) while the prefix order is preserved ($D_{\overline{\Pi}} = D_\Pi$), any admissible Herbrand strategy $h$ for $\neg\Phi$ satisfies $\vars(h_e) \subseteq D_\Pi(e)$ for each $e \in E_\Phi$.
+    Since substitution commutes with negation, $(\neg\phi)[h] \equiv \neg(\phi[h])$, which yields:
+    \begin{equation}
+        (\neg\phi)[h] \;\equiv\; \bot \quad\iff\quad \phi[h] \;\equiv\; \top .
+        \label{eq:strategy-duality}
+    \end{equation}
+    Therefore, $h$ is a winning Herbrand strategy for $\neg\Phi$ if and only if it is a winning Skolem strategy for $\Phi$.
+\end{remark}
+
+\subsection{Expansion-Based Solving}
+\label{subsec:expansion}
+
+Expansion-based solving evaluates QBFs by eliminating quantifiers through propositional instantiation~\cite{rareqs, ijtihad, janota2015}, eliminating variables of only one quantifier kind at a time.
+Given an assignment to all variables of one quantifier kind, assigned variables are replaced by their truth values, while variables of the opposite quantifier kind are replicated and \emph{annotated} by the assignment restricted to preceding variables in the prefix.
+Formally, given a universal assignment $\alpha : U_\Phi \to \Bool$, each existential variable $x \in E_\Phi$ is instantiated as the distinct propositional variable $x^\omega$, where $\omega = \alpha|_{<_\Pi x}$.
+For an existential literal $\ell$ with variable $x = \vars(\ell) \in E_\Phi$, its annotated literal is $\ell^{\alpha|_{<_\Pi x}}$, defined as $x^{\alpha|_{<_\Pi x}}$ if $\ell = x$ and $\neg x^{\alpha|_{<_\Pi x}}$ if $\ell = \neg x$.
+
+Instantiating $\Phi = \Pi.\phi$ under a complete universal assignment $\alpha : U_\Phi \to \Bool$ yields a propositional CNF formula $\phi^\alpha \coloneqq \bigwedge_{C \in \phi} C^\alpha$ over annotated existential variables, where each clause $C = C_E \lor C_U$ instantiates according to:
+\begin{equation}
+    C^\alpha \;\coloneqq\;
+    \begin{cases}
+        \top                                                     & \text{if } \alpha \models C_U,      \\[2pt]
+        \{\ell^{\alpha|_{<_\Pi \vars(\ell)}} \mid \ell \in C_E\} & \text{if } \alpha \not\models C_U .
+    \end{cases}
+\end{equation}
+The \emph{complete expansion} of $\Phi$ is the conjunction over all $2^{|U_\Phi|}$ universal assignments:
+\begin{equation}
+    \expn(\Phi) \;\coloneqq\; \bigwedge_{\alpha : U_\Phi \to \Bool} \phi^\alpha .
+\end{equation}
+A formula $\Phi$ is false if and only if there exists a set of universal assignments $A$ such that the partial expansion $\bigwedge_{\alpha \in A} \phi^\alpha$ is propositionally unsatisfiable~\cite{rareqs, ijtihad}.
+
+Dually, instantiating $\Phi$ under an existential assignment $\sigma : E_\Phi \to \Bool$ yields a formula $\phi^\sigma$ over universal variables.
+A QBF $\Phi$ is true if and only if there exists a set of existential assignments $S$ such that the disjunction $\bigvee_{\sigma \in S} \phi^\sigma$ is valid, or equivalently, the conjunction of negated instantiations:
+\begin{equation}
+    \bigwedge_{\sigma \in S} \neg\phi^\sigma \;\equiv\; \bot
+\end{equation}
+is unsatisfiable~\cite{rareqs, ijtihad}.
+
+Modern expansion solvers (e.g., RAReQS~\cite{rareqs}, Ijtihad~\cite{ijtihad}) solve QBFs by maintaining two propositional SAT instances in parallel within a Counterexample Guided Abstraction Refinement (CEGAR) loop:
+\begin{itemize}
+    \item The \emph{primal instance} accumulates instantiations $\bigwedge_{\alpha \in A} \phi^\alpha$ under universal assignments $\alpha : U_\Phi \to \Bool$. A refutation of this instance proves that $\Phi$ is false.
+    \item The \emph{dual instance} accumulates negated instantiations $\bigwedge_{\sigma \in S} \neg\phi^\sigma$ under existential assignments $\sigma : E_\Phi \to \Bool$. A refutation of this instance proves that $\Phi$ is true.
+\end{itemize}
+
+\subsection{Expansion-Based Proof Systems}
+\label{subsec:expres}
+
+Proof systems for expansion-based QBF solving are parameterized by an underlying propositional proof system $\mathcal{P}$~\cite{janota2015, ferat}.
+Formally, an expansion proof system $\forall\text{-}\mathrm{Exp}\text{+}\mathcal{P}$ over a QBF $\Psi = \Pi.\psi$ is defined by:
+\begin{enumerate}
+    \item \textbf{Axiom Rule (Universal Expansion)}:
+          Given a universal assignment $\alpha : U_\Psi \to \Bool$, instantiating the universal variables of $\Psi$ under $\alpha$ and evaluating Boolean constants yields the propositional formula $\psi^\alpha = \psi[\alpha]$.
+          Each clause of $\psi^\alpha$ (over annotated existential literals $\ell^{\alpha|_{<_\Pi \vars(\ell)}}$) is introduced as an expansion axiom under $\alpha$.
+          When $\Psi$ is in PCNF, this corresponds to the standard clause-by-clause rule: given a clause $C = C_E \lor C_U \in \psi$ such that $\alpha \not\models C_U$, the rule introduces the annotated clause:
+          \begin{equation}
+              \frac{}{\{\ell^{\alpha|_{<_\Pi \vars(\ell)}} \mid \ell \in C_E\}} \qquad (\alpha \not\models C_U) ,
+          \end{equation}
+          where each surviving existential literal $\ell \in C_E$ is annotated exclusively by the assignment to universal variables that precede its underlying variable in $\Pi$.
+    \item \textbf{Propositional Refutation in $\mathcal{P}$}:
+          A refutation of the accumulated set of annotated clauses in the propositional proof system $\mathcal{P}$, deriving the empty clause $\bot$.
+\end{enumerate}
+
+When $\mathcal{P}$ is propositional resolution ($\mathrm{Res}$), this defines the classical $\ExpRes$ calculus~\cite{janota2015}, where inferences are resolution steps over annotated existential variables with matching annotation prefixes:
+\begin{equation}
+    \frac{C_1 \lor x^\omega \qquad C_2 \lor \neg x^\omega}{C_1 \lor C_2} \qquad (x \in E_\Psi, \; \omega = \alpha|_{<_\Pi x}) .
+\end{equation}
+The $\ExpRes$ calculus is sound and complete for false PCNF QBFs~\cite{janota2015}.
+
+In modern automated reasoning, the propositional proof system $\mathcal{P}$ is commonly instantiated with clausal proof systems such as Reverse Unit Propagation (RUP) or Resolution Asymmetric Tautologies (RAT), yielding the $\forall\text{-}\mathrm{Exp}\text{+RUP}$ and $\forall\text{-}\mathrm{Exp}\text{+RAT}$ calculi~\cite{ferat}.
+This allows modern CDCL SAT solvers emitting clausal proofs to serve directly as the refutation engine.
+While RAT is presently the most common proof system for SAT solving, RUP refutations are of particular importance because they can be efficiently elaborated into resolution derivations, which in turn admit interpolation for strategy extraction.
+
+\subsection{Expansion Certification for False QBFs}
+\label{subsec:false-cert}
+
+To verify expansion-based solver results independently of solver heuristics, certification frameworks decouple verification into a two-phase architecture~\cite{ferpmodels, ferat}.
+Before detailing the verification algorithm, we review the structural contents of an expansion certificate for false QBFs.
+
+\paragraph*{Certificate Contents.}
+An expansion certificate for a false QBF $\Phi = \Pi.\phi$ consists of four components:
+\begin{enumerate}
+    \item An \emph{annotation block} that defines the provenance of each propositional variable $v$ appearing in the proof via two maps:
+          \begin{itemize}
+              \item A \emph{variable mapping} $\varepsilon(v) \in E_\Phi$, identifying the original existential variable of $\Phi$ that $v$ represents.
+              \item An \emph{assignment mapping} $\mathrm{ann}(v)$, recording the partial universal assignment under which $v$ was instantiated.
+          \end{itemize}
+    \item An \emph{axiom clause set}, containing the annotated clauses generated by universal expansion.
+    \item An \emph{origin map} $\mathrm{orig}$, mapping each axiom clause in the proof to an original matrix clause of $\Phi$ from which it was derived.
+    \item A \emph{propositional refutation} in proof system $\mathcal{P}$ (e.g., resolution in FERPModels~\cite{ferpmodels} or DRAT in FERAT~\cite{ferat}), deriving $\bot$ from the axiom clause set.
+\end{enumerate}
+
+\paragraph*{Two-Phase Verification Pipeline.}
+Verification proceeds in two independent passes:
+\begin{enumerate}
+    \item \textbf{Phase 1 (Expansion Check)}:
+          An independent polynomial-time algorithm validates that every clause $C$ in the axiom clause set is a legal universal expansion axiom of $\Phi$.
+          For each clause $C$, the checker retrieves its originating matrix clause $D = \phi[\mathrm{orig}(C)]$ and verifies:
+          \begin{itemize}
+              \item \emph{Existential literal correspondence}: $\varepsilon(C) = D_E$.
+                    This confirms that the propositional literals of $C$ accurately mirror the existential subclause of $D$.
+              \item \emph{Universal literal falsification}: gathering the universal assignment $\tau \coloneqq \bigcup_{l \in C} \mathrm{ann}(\vars(l))$ from the literal annotations, the checker confirms that every universal literal of $D$ is falsified by $\tau$:
+                    \begin{equation}
+                        \forall \ell \in D_U, \quad \neg\ell \in \tau .
+                    \end{equation}
+                    This guarantees that the universal subclause was legally falsified by the assignment $\tau$ rather than satisfying the clause outright (which would render the clause redundant).
+          \end{itemize}
+    \item \textbf{Phase 2 (Propositional Refutation Check)}:
+          The verified axiom clause set and the propositional refutation are passed to an external certifying checker (such as \texttt{drat-trim}), which validates that $\bot$ is derived soundly.
+\end{enumerate}
+
+% \paragraph*{The Structural Asymmetry.}
+% This verification paradigm is robust and efficient, but relies on an essential syntactic invariant: \emph{direct clause-to-clause correspondence}.
+% Every axiom clause $C$ in the proof corresponds directly to an original matrix clause $D \in \phi$, whose existential literals it mirrors.
+
+% For true QBFs, this invariant is broken.
+% As established in Section~\ref{subsec:expansion}, the dual instance refutes the negated expansion $\bigwedge_{\sigma \in S} \neg\phi^\sigma$, which has a DNF matrix.
+% To avoid exponential clausal blowup, solvers must apply the Plaisted--Greenbaum transformation~\cite{plaistedgreenbaum}.
+% This introduces auxiliary variables and reference clauses that do not correspond to any single clause in $\phi$, rendering the false-case checking algorithm inapplicable.
+% Bridging this gap is the primary focus of the next section.
+
+\section{Certifying Expansion Refutations (Proof Checking)}
+\label{sec:checking}
+
+In this section, we present the proof-checking foundations of DualCheck.
+We first analyze the structural obstacle preventing direct certification in the true case, and formalize the solver's dual instance as a well-defined QBF denoted $\PG(\neg\Phi)$.
+We then prove the Axiom Correspondence Lemma, establishing that every clause emitted by an expansion solver into its dual instance is an exact $\ExpRes$ axiom of $\PG(\neg\Phi)$.
+Finally, we introduce the unified DualCheck proof format (\texttt{.dc}) and the two-phase verification algorithms that validate both true and false solver outcomes.
+
+\subsection{The Clausal Barrier in True QBF Solving}
+\label{subsec:barrier}
+
+As established in Section~\ref{subsec:expansion}, modern expansion solvers decide whether a QBF $\Phi = \Pi.\phi$ is true by refuting its dual instance $\bigwedge_{\sigma \in S} \neg\phi^\sigma$, accumulated over candidate existential witnesses $\sigma : E_\Phi \to \Bool$.
+Recall that $U_{\neg\Phi} = E_\Phi$; thus, an existential candidate assignment $\sigma$ is identically a universal assignment to the universal variables of the negation $\neg\Phi$.
+
+Under a candidate witness $\sigma : E_\Phi \to \Bool$, each clause $C_i = C_{i,E} \lor C_{i,U} \in \phi$ is evaluated on its existential literals:
+\begin{itemize}
+    \item If $\sigma \models C_{i,E}$, the clause is satisfied by $\sigma$ ($C_i^\sigma = \top$), and provides no constraint.
+    \item If $\sigma \not\models C_{i,E}$, the clause survives as its universal subclause $C_{i,U}$.
+\end{itemize}
+Let $\phi^\sigma \coloneqq \{C_i \in \phi \mid \sigma \not\models C_{i,E}\}$ denote the set of matrix clauses unsatisfied by $\sigma$.
+The formula added to the dual instance on branch $\sigma$ is the negation of their conjunction:
+\begin{equation}
+    \neg\phi^\sigma \;=\; \bigvee_{C_i \in \phi^\sigma} \neg C_{i,U}^\sigma
+    \;=\; \bigvee_{C_i \in \phi^\sigma} \; \bigwedge_{\ell \in C_{i,U}} \neg\ell^\sigma .
+    \label{eq:dual-dnf}
+\end{equation}
+Because each term $\bigwedge_{\ell \in C_{i,U}} \neg\ell^\sigma$ is a conjunction of literals, $\neg\phi^\sigma$ is a disjunction of cubes---a DNF formula.
+Converting $\neg\phi^\sigma$ into CNF via distributivity would incur an exponential explosion in clause count.
+
+To preserve polynomial size, expansion solvers apply a structure-preserving Plaisted--Greenbaum (PG) transformation~\cite{plaistedgreenbaum}.
+Each universal subclause $C_{i,U}$ is associated with a fresh auxiliary variable $t_i$, so that the negated clause---that is, the cube $\neg C_{i,U}^\sigma = \bigwedge_{\ell \in C_{i,U}} \neg\ell^\sigma$---is represented by the auxiliary literal $\neg t_i^\sigma$.
+The negated conjunction $\neg\phi^\sigma$ is then represented clausally by the reference clause:
+\begin{equation}
+    R^\sigma \;\coloneqq\; \bigvee_{C_i \in \phi^\sigma} \neg t_i^\sigma ,
+    \label{eq:reference-clause}
+\end{equation}
+coupled with the definition clauses $(t_i \lor \neg\ell)$ for each literal $\ell \in C_{i,U}$.
+Because $(t_i \lor \neg\ell)$ is equivalent to $\neg t_i \to \neg\ell$, these definition clauses encode the implication:
+\begin{equation}
+    \neg t_i \;\to\; \bigwedge_{\ell \in C_{i,U}} \neg\ell ,
+    \label{eq:pg-implication}
+\end{equation}
+asserting that the auxiliary literal $\neg t_i$ in the reference clause implies the negated clause, i.e., the cube $\neg C_{i,U}$.
+
+Consequently, the dual SAT solver refutes instantiations not of the input formula $\Phi$, but of an encoded formula containing auxiliary variables $t_i$.
+This transformation breaks the direct clause-to-clause correspondence that false-case certification frameworks rely upon: the reference clauses $R^\sigma$ and definition clauses do not exist in the original matrix $\phi$.
+
+\subsection{The Encoded Negation \texorpdfstring{$\PG(\neg\Phi)$}{PG(not Phi)} and Axiom Correspondence}
+\label{subsec:pg-encoding}
+
+To place dual refutations on a rigorous proof-theoretic foundation, we formalize the solver's clausal encoding at the QBF level.
+Refuting the dual instance witnesses that $\Phi$ is true, which is semantically equivalent to refuting the negation $\neg\Phi = \overline{\Pi}.\neg\phi$.
+The formula $\PG(\neg\Phi)$ lifts the solver's auxiliary variables and definition clauses into a formal QBF.
+
+\begin{definition}[Plaisted--Greenbaum Encoding $\PG(\neg\Phi)$]
+    \label{def:pg-qbf}
+    Let $\Phi = \Pi.\phi$ be a PCNF QBF with $\phi = \{C_1, \dots, C_m\}$.
+    For each clause $C_i \in \phi$, let $t_i$ be an auxiliary variable associated with $C_i$ such that $\neg t_i$ represents the negated universal subclause (cube) $\neg C_{i,U} = \bigwedge_{\ell \in C_{i,U}} \neg\ell$, and let $T \coloneqq \{t_1, \dots, t_m\}$.
+    The QBF $\PG(\neg\Phi) \coloneqq \Pi'.\phi'$ is defined by:
+    \begin{itemize}
+        \item \textbf{Prefix}: $\Pi'$ is obtained from the dual prefix $\overline{\Pi}$ by inserting each auxiliary variable $t_i$ existentially immediately after $v_i^* \coloneqq \max_{<_\Pi}\vars(C_{i,U})$, so that
+              \begin{equation}
+                  U_{\PG(\neg\Phi)} \;=\; U_{\neg\Phi} \;=\; E_\Phi , \qquad
+                  E_{\PG(\neg\Phi)} \;=\; E_{\neg\Phi} \cup T \;=\; U_\Phi \cup T .
+              \end{equation}
+        \item \textbf{Matrix}: $\phi'$ consists of the definition clauses and the reference formula:
+              \begin{enumerate}
+                  \item \emph{Definition clauses}: for each clause $C_i \in \phi$ and each literal $\ell \in C_{i,U}$, the binary clause:
+                        \begin{equation}
+                            (t_i \lor \neg\ell) ,
+                        \end{equation}
+                        encoding the implication $\neg t_i \to \neg\ell$, and collectively $\neg t_i \to \bigwedge_{\ell \in C_{i,U}} \neg\ell$ (i.e., $\neg t_i \to \neg C_{i,U}$).
+                  \item \emph{Reference formula}: the formula
+                        \begin{equation}
+                            \bigvee_{C_i \in \phi} (\neg C_{i,E} \land \neg t_i) .
+                            \label{eq:ref-formula}
+                        \end{equation}
+              \end{enumerate}
+    \end{itemize}
+\end{definition}
+
+Quantifying each $t_i$ immediately after $v_i^*$ ensures that every variable in the definition of $t_i$ precedes $t_i$ in the prefix $\Pi'$:
+\begin{equation}
+    \forall \ell \in C_{i,U}, \quad \vars(\ell) \;\leq_{\Pi'}\; v_i^* \;{<}_{\Pi'}\; t_i .
+    \label{eq:prefix-order-ti}
+\end{equation}
+Because each auxiliary variable $t_i$ is existential and quantified after all variables in its defining subclause $C_{i,U}$, setting $t_i \equiv \bigvee_{\ell \in C_{i,U}} \ell$ is prefix-admissible, reduces each definition clause $(t_i \lor \neg\ell)$ to a tautology, and transforms the reference formula $\bigvee_{C_i \in \phi} (\neg C_{i,E} \land \neg t_i)$ into $\bigvee_{C_i \in \phi} \neg C_i \equiv \neg\phi$.
+Hence, $\PG(\neg\Phi)$ is an equisatisfiable definitional encoding of $\neg\Phi$, false if and only if $\neg\Phi$ is false.
+
+When the dual solver explores a candidate assignment $\sigma : U_{\neg\Phi} \to \Bool$, it accumulates definition clauses and reference clauses over annotated existential variables.
+We now prove that all such clauses are valid universal expansion axioms of $\PG(\neg\Phi)$.
+
+\begin{lemma}[Axiom Correspondence]
+    \label{lem:axiom-correspondence}
+    Every clause introduced into the dual instance by an expansion solver on branch $\sigma$ is a valid universal expansion axiom of $\PG(\neg\Phi)$ under the universal assignment $\sigma : U_{\neg\Phi} \to \Bool$.
+\end{lemma}
+
+\begin{proof}
+    We analyze the two classes of clauses generated on branch $\sigma$:
+    \begin{enumerate}
+        \item \textbf{Definition clauses.}
+              For each clause $C_i \in \phi$ and literal $\ell \in C_{i,U}$, the binary clause $(t_i \lor \neg\ell)$ is an explicit clause of the matrix $\phi'$ of $\PG(\neg\Phi)$.
+              Both $t_i \in T$ and $\vars(\ell) \in U_\Phi = E_{\neg\Phi}$ are existential variables in $\PG(\neg\Phi)$; neither is assigned by the universal assignment $\sigma : U_{\neg\Phi} \to \Bool$.
+              Under universal assignment $\sigma$, the $\ExpRes$ axiom rule simply annotates each literal with the restriction of $\sigma$ to preceding universal variables in $\Pi'$, yielding the annotated clause:
+              \begin{equation}
+                  (t_i^{\sigma|_{<_{\Pi'} t_i}} \lor \neg\ell^{\sigma|_{<_{\Pi'} \vars(\ell)}}) .
+              \end{equation}
+              Hence, every definition clause emitted by the solver is a valid $\ExpRes$ axiom of $\PG(\neg\Phi)$.
+
+        \item \textbf{Reference clauses.}
+              On branch $\sigma$, the solver emits the reference clause:
+              \begin{equation}
+                  R^\sigma \;=\; \bigvee_{C_i \in \phi^\sigma} \neg t_i^{\sigma|_{<_{\Pi'} t_i}} ,
+              \end{equation}
+              where $\phi^\sigma = \{C_i \in \phi \mid \sigma \not\models C_{i,E}\}$.
+              In $\PG(\neg\Phi)$, the reference formula is $\bigvee_{C_i \in \phi} (\neg C_{i,E} \land \neg t_i)$.
+              Because $\vars(C_{i,E}) \subseteq E_\Phi = U_{\neg\Phi}$, every literal in $C_{i,E}$ is universal in $\PG(\neg\Phi)$.
+              Under the full universal assignment $\sigma : U_{\neg\Phi} \to \Bool$, each term $(\neg C_{i,E} \land \neg t_i)$ is evaluated as follows:
+              \begin{itemize}
+                  \item If $\sigma \models C_{i,E}$, then $\neg C_{i,E}$ evaluates to $\bot$, and the term evaluates to $\bot \land \neg t_i \equiv \bot$.
+                  \item If $\sigma \not\models C_{i,E}$ (i.e., $C_i \in \phi^\sigma$), then $\neg C_{i,E}$ evaluates to $\top$, leaving the unassigned existential literal $\neg t_i^{\sigma|_{<_{\Pi'} t_i}}$.
+              \end{itemize}
+              The disjunction of surviving terms yields precisely the reference clause $R^\sigma$.
+              Therefore, under universal assignment $\sigma$, the reference formula simplifies under Boolean constant evaluation directly to the clause $R^\sigma$.
+    \end{enumerate}
+    Thus, all initial clauses refuted in the dual instance are clauses of the instantiated matrix $\phi'[\sigma]$, confirming that they are valid universal expansion axioms of $\PG(\neg\Phi)$.
+    \qed
+\end{proof}
+
+\begin{theorem}[Refutation Certification]
+    \label{thm:refutation-certification}
+    Let $\pi$ be a propositional resolution refutation of the dual instance produced by an expansion solver.
+    Then $\pi$ is an $\ExpRes$ refutation of $\PG(\neg\Phi)$, soundly certifying that $\PG(\neg\Phi)$ is false and that $\Phi$ is true.
+\end{theorem}
+
+\begin{proof}
+    By Lemma~\ref{lem:axiom-correspondence}, every initial clause of $\pi$ is a valid $\ExpRes$ axiom of $\PG(\neg\Phi)$.
+    Every resolution step in $\pi$ operates on annotated existential literals with identical prefixes.
+    Because $\pi$ derives the empty clause $\bot$, $\pi$ is an $\ExpRes$ refutation of $\PG(\neg\Phi)$.
+    By soundness of $\ExpRes$, $\PG(\neg\Phi)$ is false.
+    By Definition~\ref{def:pg-qbf}, $\PG(\neg\Phi)$ is an equisatisfiable definitional encoding of $\neg\Phi$.
+    Therefore, $\neg\Phi$ is false, which by QBF duality (Remark~\ref{rem:duality}) soundly certifies that $\Phi$ is true.
+    \qed
+\end{proof}
+
+\subsection{The DualCheck Proof Format}
+\label{subsec:format}
+
+To enable independent verification, DualCheck defines a unified proof format (\texttt{.dc}) to support both true and false QBFs.
+The format uses standard ASCII representation, organized into distinct sections:
+
+\paragraph*{Status and Problem Header.}
+Every proof begins with a status line declaring whether the certified result is false or true:
+\begin{equation*}
+    \texttt{s 0} \quad (\text{false QBF}) \qquad\text{or}\qquad \texttt{s 1} \quad (\text{true QBF}) .
+\end{equation*}
+This is immediately followed by the dimension header:
+\begin{equation*}
+    \texttt{p dc} \quad \langle\mathit{num\_prop\_vars}\rangle \quad \langle\mathit{clause\_count}\rangle
+\end{equation*}
+specifying the dimensions of the proof:
+\begin{itemize}
+    \item $\langle\mathit{num\_prop\_vars}\rangle$: the highest propositional variable index used anywhere in the proof (following the standard DIMACS upper-bound convention);
+    \item $\langle\mathit{clause\_count}\rangle$: the number of initial propositional clauses in the expansion formula---specifically, the count of axiom clauses (\texttt{a}) for false QBFs, or the combined count of definition (\texttt{h}) and reference (\texttt{n}) clauses for true QBFs, excluding subsequent derived resolution clauses (\texttt{d}).
+\end{itemize}
+
+\paragraph*{Expansion Lines.}
+Lines starting with \texttt{x} state the variables introduced in the certificate, what original QBF variables they represent, and the assignment under which they were instantiated:
+\begin{equation*}
+    \texttt{x } v_1 \dots v_k \texttt{ 0 } q_1 \dots q_k \texttt{ 0 } l_1 \dots l_p \texttt{ 0}
+\end{equation*}
+where $v_1 \dots v_k$ are the variables in the certificate, $q_1 \dots q_k$ are the original variables they represent, and $l_1 \dots l_p$ is the assignment under which they were instantiated.
+Variables appearing in clauses that are not declared in any \texttt{x} line are auxiliary definition variables $T$.
+
+\paragraph*{Expansion Clauses.}
+Initial clauses are tagged by single-character identifiers and store all required semantic provenance inline:
+\begin{itemize}
+    \item \textbf{Axiom clauses} (\texttt{a}, false QBFs):
+          \begin{equation*}
+              \texttt{a } \mathit{id} \quad l_1 \dots l_k \texttt{ 0 } \mathit{orig} \texttt{ 0}
+          \end{equation*}
+          storing the sequential clause identifier $\mathit{id}$, the instantiated literals $l_1 \dots l_k$, and the 1-based index $\mathit{orig}$ of the originating matrix clause $D \in \phi$.
+    \item \textbf{Definition clauses} (\texttt{h}, true QBFs):
+          \begin{equation*}
+              \texttt{h } \mathit{id} \quad l_1 \; l_2 \texttt{ 0}
+          \end{equation*}
+          storing the sequential clause identifier $\mathit{id}$ and the binary definition clause $(t_i \lor \neg\ell)$ defining the auxiliary variable $t_i$.
+    \item \textbf{Reference clauses} (\texttt{n}, true QBFs):
+          \begin{equation*}
+              \texttt{n } \mathit{id} \quad l_1 \dots l_k \texttt{ 0 } o_1 \dots o_k \texttt{ 0 } a_1 \dots a_m \texttt{ 0}
+          \end{equation*}
+          containing three zero-terminated sequences:
+          \begin{enumerate}
+              \item The literals $l_1 \dots l_k$ forming the reference clause $R^\sigma$;
+              \item The inline literal origins $o_1 \dots o_k$, supplying the 1-based index of the originating matrix clause $D_j \in \phi$ for each corresponding literal $l_j$;
+              \item The inline candidate existential witness assignment $a_1 \dots a_m$, recording the explicit existential assignment $\sigma : E_\Phi \to \Bool$ explored on this branch.
+          \end{enumerate}
+\end{itemize}
+
+\paragraph*{Refutation Trace.}
+The propositional refutation is recorded as a sequence of derived resolution clauses:
+\begin{equation*}
+    \texttt{d } \mathit{id} \quad l_1 \dots l_k \texttt{ 0 } c_1 \dots c_p \texttt{ 0}
+\end{equation*}
+where $\mathit{id}$ is the derived clause identifier, $l_1 \dots l_k$ are the resolvent literals (empty for the final refuting clause $\bot$), and $c_1 \dots c_p$ are antecedent clause identifiers in the proof.
+
+\subsection{Certificate Verification}
+\label{subsec:verification}
+
+DualCheck verifies certificates via a two-phase architecture:
+\begin{enumerate}
+    \item \textbf{Phase 1 (Expansion Check)}:
+          The checker first processes the \texttt{x} lines to recover the mapping from each propositional variable to its original QBF variable and the assignment under which it was instantiated.
+          Using these mappings, the checker validates that every initial clause in the certificate is a sound $\ExpRes$ axiom of $\Phi$ (for false QBFs) or of $\PG(\neg\Phi)$ (for true QBFs).
+    \item \textbf{Phase 2 (Refutation Check)}:
+          Validates that the derived resolution steps (\texttt{d} lines) form a sound refutation deriving the empty clause $\bot$.
+\end{enumerate}
+
+\paragraph*{False QBF Verification (\texttt{s 0}).}
+For false instances, Phase~1 validates each axiom clause (\texttt{a} line) against its originating matrix clause $D = \phi[\mathit{orig}]$ by executing the expansion check defined in Section~\ref{subsec:false-cert}: verifying existential correspondence under $\varepsilon$ and ensuring that the accumulated literal annotations consistently falsify all universal literals in $D_U$.
+
+\paragraph*{True QBF Verification (\texttt{s 1}).}
+For true instances, Phase~1 validates the initial clauses of the certificate against the matrix $\phi$ and the candidate existential assignments $\sigma$ recorded on each reference clause (\texttt{n} line):
+\begin{enumerate}
+    \item \emph{Cube encoding and definition validation}: For each auxiliary literal $\neg t_i$ in a reference clause with originating matrix clause $D = \phi[o_j]$, the checker validates that the definition clauses (\texttt{h} lines) for $t_i$ are of the form $(t_i \lor \neg\ell)$ such that the literals $\{\ell\}$ constitute precisely the universal subclause $D_U$.
+    \item \emph{Annotation agreement}: The explicit existential assignment $\sigma$ recorded in the reference clause agrees with the assignment recovered from the annotation of each literal $\ell \in D_U$.
+    \item \emph{Clause satisfaction}: Every matrix clause omitted from the reference clause (claimed to be eliminated on this branch) is verified to be satisfied by the assignment ($\sigma \models C_E$).
+    \item \emph{Definition liveness}: Every auxiliary variable defined in a definition clause (\texttt{h} line) appears negated in at least one reference clause, ensuring that no unreferenced definitions remain in the certificate.
+\end{enumerate}
+
+Both checking routines operate in linear time with respect to the certificate and matrix size:
+\begin{theorem}[Complexity of Expansion Checking]
+    \label{thm:checking-complexity}
+    Phase~1 executes in time $O(|\mathcal{C}| \cdot \|\phi\|)$, where $|\mathcal{C}|$ is the number of clauses in the certificate and $\|\phi\|$ is the size of the input QBF matrix.
+\end{theorem}
+\begin{proof}
+    For false QBFs, Phase~1 validates each of the $O(|\mathcal{C}|)$ axiom clauses in $O(|D|) \le O(\|\phi\|)$ time by verifying literal correspondence and universal falsification via direct array lookups.
+    For true QBFs, validating each reference clause involves checking definition clauses and literal annotations in $O(|D_U|) \le O(\|\phi\|)$ time.
+    Verifying clause satisfaction for omitted matrix clauses requires testing $\sigma \models C_E$, which takes $O(\|\phi\|)$ total time per reference clause.
+    Definition liveness is verified in a single linear pass over the certificate clauses in $O(|\mathcal{C}|)$ time.
+    Summing over all certificate clauses yields an overall verification time of $O(|\mathcal{C}| \cdot \|\phi\|)$.
+    \qed
+\end{proof}
+
+\section{Skolem Strategy Extraction}
+\label{sec:extraction}
+
+Beyond deciding truth values and verifying proofs, a primary practical application of QBF solving is strategy synthesis: extracting winning moves for the winning player as computable Boolean circuits.
+For false QBFs, strategy extraction from $\ExpRes$ refutations is well understood: symmetric Craig interpolation produces an admissible winning Herbrand strategy~\cite{slivovsky2024,schlaipfer2020}.
+For true QBFs, however, strategy extraction in expansion solving has remained an open challenge due to the clausal disruption introduced by structure-preserving definitional transformations.
+We now show that the clausal duality established in Section~\ref{sec:checking} resolves this challenge, enabling polynomial-time extraction of winning Skolem strategies from dual expansion refutations.
+
+\paragraph*{Eliminating Auxiliary Variables via Definition Substitution.}
+Now let $\Phi = \Pi.\phi$ be a true QBF, and let $\pi$ be the resolution refutation of the dual propositional instance produced by an expansion solver.
+By Theorem~\ref{thm:refutation-certification}, $\pi$ is an exact $\ExpRes$ refutation of the encoded negation $\PG(\neg\Phi)$.
+In $\PG(\neg\Phi)$, the quantifier roles are inverted relative to $\Phi$: the original existential variables $E_\Phi$ become universal ($U_{\PG(\neg\Phi)} = E_\Phi$), while the original universal variables $U_\Phi$ and the auxiliary definition variables $T$ become existential ($E_{\PG(\neg\Phi)} = U_\Phi \cup T$).
+
+By the strategy extraction framework of Slivovsky~\cite{slivovsky2024}, symmetric Craig interpolation applied to an $\ExpRes$ resolution refutation DAG directly yields an admissible winning Herbrand strategy.
+Applying this extraction to $\pi$ on $\PG(\neg\Phi)$ yields an admissible winning Herbrand strategy $h = (h_e)_{e \in E_\Phi}$ for $\PG(\neg\Phi)$, guaranteeing that $\phi'[h] \equiv \bot$.
+However, because $\pi$ contains resolution steps on auxiliary definition variables $t_i \in T$ that precede some $e \in E_\Phi$ in the prefix $\Pi'$ ($t_i <_{\Pi'} e$), the component circuits $h_e$ may read variables in $T$.
+Because $T$ are auxiliary variables not present in $\Phi$, $h$ cannot serve directly as a Skolem strategy for $\Phi$.
+To eliminate the auxiliary variables, we substitute each $t_i$ with its defining disjunction:
+\begin{equation}
+    \label{eq:substitution}
+    \psi^* \;\coloneqq\; \psi\big[t_1 / \textstyle\bigvee_{\ell \in C_{1,U}} \ell\big] \dots \big[t_m / \textstyle\bigvee_{\ell \in C_{m,U}} \ell\big] .
+\end{equation}
+Applying this substitution to each component circuit $h_e$ yields the substituted strategy $h^* \coloneqq (h_e^*)_{e \in E_\Phi}$.
+
+\begin{lemma}[Strategy Correspondence]
+    \label{lem:strategy-correspondence}
+    If $h$ is a winning Herbrand strategy for $\PG(\neg\Phi)$, then $h^*$ is an admissible winning Herbrand strategy for $\neg\Phi$.
+\end{lemma}
+\begin{proof}
+    \emph{Admissibility.}
+    Let $e \in E_\Phi = U_{\neg\Phi}$.
+    Any variable $w \in \vars(h_e^*)$ either appears directly in $h_e$ (in which case $w <_{\Pi'} e$ by the admissibility of $h$), or was introduced by substituting for an auxiliary variable $t_i \in \vars(h_e)$ with $t_i <_{\Pi'} e$.
+    In the latter case, $w \in \vars(C_{i,U})$.
+    By construction of the prefix $\Pi'$ (Definition~\ref{def:pg-qbf}), $t_i$ is placed immediately after $v_i^* = \max_{<_\Pi}\vars(C_{i,U})$.
+    Therefore, $w \le_\Pi v_i^* <_{\Pi'} t_i <_{\Pi'} e$.
+    Since $w \in U_\Phi = E_{\neg\Phi}$ and $e \in E_\Phi = U_{\neg\Phi}$, their relative order is preserved under quantifier inversion: $w <_\Pi e$.
+    Hence $\vars(h_e^*) \subseteq D_\Pi(e)$, confirming that $h_e^*$ depends exclusively on variables strictly preceding $e$ in the original prefix $\Pi$.
+
+    \emph{Soundness.}
+    To prove that $h^*$ is a winning Herbrand strategy for $\neg\Phi$, we must show that $(\neg\phi)[h^*] \equiv \bot$.
+    Recall from Definition~\ref{def:pg-qbf} that the matrix $\phi'$ of $\PG(\neg\Phi)$ is the conjunction of the definition clauses and the reference formula $\bigvee_{C_i \in \phi} (\neg C_{i,E} \land \neg t_i)$.
+    Because $h$ is a winning Herbrand strategy for $\PG(\neg\Phi)$, it falsifies the matrix: $\phi'[h] \equiv \bot$.
+    We evaluate the effect of the definition substitution $(\cdot)^*$ in four steps:
+    \begin{enumerate}
+        \item \emph{Definition clauses star to $\top$}:
+              For each clause $C_i \in \phi$ and each literal $\ell \in C_{i,U}$, applying $[t_i / \bigvee_{\ell' \in C_{i,U}} \ell']$ gives:
+              \begin{equation*}
+                  (t_i \lor \neg\ell)^* \;=\; \Big(\bigvee_{\ell' \in C_{i,U}} \ell'\Big) \lor \neg\ell \;\equiv\; \top ,
+              \end{equation*}
+              due to the complementary literal pair $\ell \lor \neg\ell$.
+              Hence all definition clauses evaluate to $\top$ under $(\cdot)^*$.
+        \item \emph{The reference formula stars to $\neg\phi$}:
+              Applying $(\cdot)^*$ to the reference formula replaces each $\neg t_i$ with $\neg\big(\bigvee_{\ell \in C_{i,U}} \ell\big) = \bigwedge_{\ell \in C_{i,U}} \neg\ell = \neg C_{i,U}$.
+              Because $C_{i,E}$ contains no auxiliary variables from $T$, we have:
+              \begin{align*}
+                  \Big(\bigvee_{C_i \in \phi} (\neg C_{i,E} \land \neg t_i)\Big)^*
+                   & \;=\; \bigvee_{C_i \in \phi} (\neg C_{i,E} \land \neg C_{i,U}) \\
+                   & \;=\; \bigvee_{C_i \in \phi} \neg (C_{i,E} \lor C_{i,U})
+                  \;=\; \bigvee_{C_i \in \phi} \neg C_i \;\equiv\; \neg\phi .
+              \end{align*}
+              Combined with step~1, the entire matrix stars to $\neg\phi$: $(\phi')^* \equiv \top \land \neg\phi \equiv \neg\phi$.
+        \item \emph{$(\cdot)^*$ and $[h]$ commute}:
+              Because the domain of $(\cdot)^*$ is $T$, the domain of $h$ is $E_\Phi$, $T \cap E_\Phi = \emptyset$, and the substituted strategy is defined componentwise by $h_e^* \coloneqq (h_e)^*$, the substitutions commute:
+              \begin{equation*}
+                  ((\phi')^*)[h^*] \;\equiv\; ((\phi')[h])^* .
+              \end{equation*}
+        \item \emph{Substitution preserves unsatisfiability}:
+              Because $h$ is winning for $\PG(\neg\Phi)$, $\phi'[h] \equiv \bot$.
+              Any substitution instance of a contradiction is contradictory:
+              \begin{equation*}
+                  ((\phi')[h])^* \;\equiv\; \bot^* \;\equiv\; \bot .
+              \end{equation*}
+    \end{enumerate}
+    Chaining these equivalences establishes:
+    \begin{equation*}
+        (\neg\phi)[h^*] \;\equiv\; ((\phi')^*)[h^*] \;\equiv\; ((\phi')[h])^* \;\equiv\; \bot .
+    \end{equation*}
+    Therefore, $h^*$ is an admissible winning Herbrand strategy for $\neg\Phi$.
+    \qed
+\end{proof}
+
+\begin{theorem}[Skolem Strategy Extraction]
+    \label{thm:skolem-extraction}
+    Let $\Phi$ be a true PCNF QBF and let $\pi$ be an $\ExpRes$ refutation of $\PG(\neg\Phi)$.
+    Applying the interpolation framework of Slivovsky~\cite{slivovsky2024} to $\pi$ followed by the definition substitution of Lemma~\ref{lem:strategy-correspondence} yields an admissible winning Skolem strategy $s = (s_e)_{e \in E_\Phi}$ for $\Phi$ in time $O(|\pi| \cdot \|\phi\|)$.
+\end{theorem}
+\begin{proof}
+    We construct the winning Skolem strategy $s$ in three stages:
+    \begin{enumerate}
+        \item \emph{Refutation Structure}:
+              By Theorem~\ref{thm:refutation-certification}, $\pi$ is a valid $\ExpRes$ refutation DAG of $\PG(\neg\Phi)$ deriving the empty clause $\bot$.
+              The leaves of $\pi$ are universal expansion axioms of $\PG(\neg\Phi)$ under candidate universal assignments $\sigma : U_{\PG(\neg\Phi)} \to \Bool$ (where $U_{\PG(\neg\Phi)} = E_\Phi$).
+              Each internal node $v \in \pi$ represents a propositional resolution step on an annotated existential pivot literal $x^\tau$, where $x \in E_{\PG(\neg\Phi)} = U_\Phi \cup T$.
+        \item \emph{Interpolation and Herbrand Strategy Synthesis}:
+              Following Slivovsky~\cite{slivovsky2024}, symmetric Craig interpolation applied to the refutation DAG $\pi$ extracts an admissible winning Herbrand strategy $h = (h_e)_{e \in E_\Phi}$ for $\PG(\neg\Phi)$ in time $O(|\pi|)$, ensuring that $\phi'[h] \equiv \bot$.
+        \item \emph{Definition Substitution and Strategy Duality}:
+              Because $\pi$ contains resolution steps on auxiliary variables $t_i \in T$ with $t_i <_{\Pi'} e$, each circuit $h_e$ may read inputs from $T$.
+              Applying the definition substitution of Eq.~\eqref{eq:substitution} replaces each auxiliary input $t_i$ with the disjunction $\bigvee_{\ell \in C_{i,U}} \ell$.
+              Since each clause $C_i \in \phi$ has $|C_{i,U}| \le \|\phi\|$, this substitution adds at most $O(|T| \cdot \|\phi\|)$ gates and executes in linear time $O(|h| + |T| \cdot \|\phi\|) = O(|\pi| \cdot \|\phi\|)$.
+              By Lemma~\ref{lem:strategy-correspondence}, the substituted circuit family $h^* = (h_e^*)_{e \in E_\Phi}$ is an admissible winning Herbrand strategy for $\neg\Phi$, satisfying $(\neg\phi)[h^*] \equiv \bot$.
+              By strategy duality under negation (Remark~\ref{rem:duality}), setting $s \coloneqq h^*$ yields an admissible winning Skolem strategy for $\Phi$ satisfying $\phi[s] \equiv \top$.
+    \end{enumerate}
+    The entire extraction procedure operates in time $O(|\pi| \cdot \|\phi\|)$.
+    \qed
+\end{proof}
+
+\section{Related Work}
+\label{sec:related}
+% Placeholder for Section 5
+
+\section{Conclusion}
+\label{sec:conclusion}
+% Placeholder for Section 6
+
+
+
+\begin{table}[p]
+    \centering
+    \caption{Summary of foundational symbols, notations, and domains.}
+    \label{tab:notation}
+    \scriptsize
+    \renewcommand{\arraystretch}{0.92}
+    \begin{tabularx}{\textwidth}{@{}l l l >{\raggedright\arraybackslash}X@{}}
+        \toprule
+        \textbf{Symbol}                      & \textbf{Type}     & \textbf{Domain / Definition}                                       & \textbf{Role / Meaning}                                                         \\
+        \midrule
+        \multicolumn{4}{@{}l}{\emph{Formula Syntax and Semantics}}                                                                                                                                                      \\
+        $\Phi = \Pi.\phi$                    & PCNF QBF          & $\phi = \{C_1, \dots, C_m\}$                                       & Input formula with linear prefix $\Pi$ and CNF matrix $\phi$                    \\
+        $E_\Phi, U_\Phi$                     & Variable sets     & $V_\Phi = E_\Phi \cup U_\Phi$                                      & Existential and universal variable sets of $\Phi$                               \\
+        $D_\Pi(v)$                           & Variable set      & $\{w \in V_\Phi \mid w <_\Pi v\}$                                  & Dependency domain of variable $v$ under $\Pi$                                   \\
+        $C_i = C_{i,E} \lor C_{i,U}$         & Clause            & $\vars(C_{i,E}) \subseteq E_\Phi, \vars(C_{i,U}) \subseteq U_\Phi$ & Clause partitioned into existential and universal parts                         \\
+        $\neg\Phi = \overline{\Pi}.\neg\phi$ & PDNF QBF          & $U_{\neg\Phi} = E_\Phi, E_{\neg\Phi} = U_\Phi$                     & Negation of $\Phi$; false QBF targeted in dual solving                          \\
+        \midrule
+        \multicolumn{4}{@{}l}{\emph{Strategies and Duality}}                                                                                                                                                            \\
+        $s = (s_e)_{e \in E_\Phi}$           & Skolem strategy   & $\vars(s_e) \subseteq D_\Pi(e)$                                    & Winning strategy for $\Phi$ ($\phi[s] \equiv \top$)                             \\
+        $h = (h_u)_{u \in U_\Phi}$           & Herbrand strategy & $\vars(h_u) \subseteq D_\Pi(u)$                                    & Winning strategy for false $\Phi$ ($\phi[h] \equiv \bot$)                       \\
+        \midrule
+        \multicolumn{4}{@{}l}{\emph{Expansion Solving and Proof Calculus}}                                                                                                                                              \\
+        $\alpha$                             & Assignment        & $\alpha : U_\Phi \to \Bool$                                        & Universal assignment explored in primal solving                                 \\
+        $\sigma$                             & Assignment        & $\sigma : E_\Phi \to \Bool$                                        & Existential candidate assignment explored in dual solving                       \\
+        $\phi^\alpha$                        & Prop.\ CNF        & $\bigwedge_{C \in \phi} C^\alpha$                                  & Instantiation of $\phi$ under universal branch $\alpha$                         \\
+        $\phi^\sigma$                        & Clause set        & $\{C_i \in \phi \mid \sigma \not\models C_{i,E}\}$                 & Clauses unsatisfied by existential candidate $\sigma$                           \\
+        $\neg\phi^\sigma$                    & Prop.\ DNF        & $\bigvee_{C_i \in \phi^\sigma} \neg C_{i,U}^\sigma$                & Negated instantiation on branch $\sigma$                                        \\
+        $\ExpRes$                            & Proof system      & Universal expansion + resolution                                   & Background proof calculus for expansion refutations                             \\
+        \midrule
+        \multicolumn{4}{@{}l}{\emph{Clausal Negation Encoding and Strategy Extraction}}                                                                                                                                 \\
+        $t_i \in T$                          & Aux.\ variable    & $v_i^* <_{\Pi'} t_i$                                               & Abbreviation for universal subclause $\bigvee_{\ell \in C_{i,U}} \ell$          \\
+        $v_i^*$                              & Variable          & $\max_{<_\Pi}\vars(C_{i,U})$                                       & Innermost universal variable of $C_i$ in $\Pi$                                  \\
+        $\PG(\neg\Phi) = \Pi'.\phi'$         & QBF               & $U_{\PG(\neg\Phi)} = E_\Phi, E_{\PG(\neg\Phi)} = U_\Phi \cup T$    & Definitional encoding of $\neg\Phi$                                             \\
+        $(t_i \lor \neg\ell)$                & Clause            & $\ell \in C_{i,U}, t_i \in T$                                      & Definition clause encoding $\neg t_i \to \bigwedge_{\ell \in C_{i,U}} \neg\ell$ \\
+        $R^\sigma$                           & Clause            & $\bigvee_{C_i \in \phi^\sigma} \neg t_i^\sigma$                    & Reference clause emitted on branch $\sigma$                                     \\
+        $\psi^*$                             & Substitution      & $[t_i / \bigvee_{\ell \in C_{i,U}} \ell]$                          & Definition substitution eliminating auxiliary variables                         \\
+        $I^C_i$                              & Boolean circuit   & Formula over $D_\Pi(u_i)$                                          & Partial Craig interpolant label for clause $C$ and variable $u_i$               \\
+        $G_i(\mu)$                           & Guard condition   & $H^{i-1}_\mu \land (\mu(u_i) \leftrightarrow 0)$                   & Prefix guard matching opposing assignment $\mu$                                 \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}
