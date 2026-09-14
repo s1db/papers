@@ -33,11 +33,41 @@
 \maketitle
 
 \begin{abstract}
-    % Expansion-based solving is a leading paradigm for quantified Boolean formulas (QBFs), yet certifying solver results has suffered from a fundamental asymmetry: while refutations of false QBFs admit direct certification in the $\ExpRes$ proof system, certifying true QBFs has remained an open challenge due to the clausal disruption introduced by structure-preserving definitional transformations.
-    % In this work, we present \emph{DualCheck}, establishing a unified proof system and certification framework for expansion-based QBF solving across both polarities, with a primary theoretical focus on the true case.
-    % We show that dual expansion solving is fundamentally universal expansion on the Plaisted--Greenbaum negation $\PG(\neg\Phi)$, prove that all dual clauses are valid $\ExpRes$ axioms, and demonstrate that winning Skolem strategies can be extracted by definition substitution on interpolated Herbrand strategies, with formal proofs of admissibility and semantic falsification of the negation.
-    % DualCheck provides an independent certificate checker and strategy synthesizer, completing the certification landscape for expansion-based solving.
-    % \keywords{Quantified Boolean Formulas \and Proof Certification \and Expansion-Based Solving \and Strategy Extraction.}
+    % Expansion-based solving is one of the most successful paradigms for deciding
+    % quantified Boolean formulas (QBFs), and the frameworks FERPModels and FERAT
+    % make its \emph{false} answers independently checkable, with universal
+    % (Herbrand) winning strategies extractable from the resulting refutations.
+    % Its \emph{true} answers have so far resisted certification. The obstacle is
+    % structural: to establish that a QBF is true, an expansion solver refutes a
+    % negated instantiation, which is a DNF, and clausifies it by a
+    % structure-preserving Plaisted--Greenbaum transformation. The auxiliary
+    % variables this introduces destroy the clause-to-clause correspondence with
+    % the input matrix on which existing checkers depend.
+
+    % We close this gap. We lift the solver's clausal encoding to the QBF level,
+    % obtaining a PCNF QBF $\PG(\neg\Phi)$ whose universal variables are the
+    % existential variables of $\Phi$ and each of whose auxiliary variables is
+    % quantified immediately after its own definition. We then characterise
+    % exactly which clauses are universal expansion axioms of $\PG(\neg\Phi)$, and
+    % show that the clauses an expansion solver places into its dual instance are
+    % such axioms. Consequently the solver's dual refutation is, verbatim, an
+    % $\ExpRes$ refutation of $\PG(\neg\Phi)$, and soundness and completeness are
+    % inherited from $\ExpRes$ rather than reproved.
+
+    % Building on this correspondence we contribute (i) DualCheck, a single proof
+    % format and linear-time checker covering both the true and the false answers
+    % of an expansion solver, with a soundness proof that isolates the checks on
+    % which soundness actually depends, and (ii) the first polynomial-time
+    % extraction of Skolem winning strategies from expansion refutations, obtained
+    % by applying symmetric Craig interpolation to the dual refutation and then
+    % eliminating auxiliary variables by definition substitution, in time
+    % $O(|\pi| \cdot |E_\Phi| + \|\phi\|)$. We implement the full pipeline on top
+    % of the expansion solver Ijtihad and evaluate it on QBFEval benchmarks, where
+    % DualCheck certifies %%TODO true and %%TODO false instances and extracts
+    % independently validated Skolem strategies for %%TODO of them.
+
+    \keywords{Quantified Boolean Formulas \and Proof Certification \and
+        Expansion-Based Solving \and Strategy Extraction.}
 \end{abstract}
 
 \section{Introduction}

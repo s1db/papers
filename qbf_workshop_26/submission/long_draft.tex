@@ -1,0 +1,538 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\newtheorem{example}{Example}
+\usepackage{mdframed} 
+\usepackage{subcaption}
+\usepackage[noend]{algorithmic}
+\usepackage{algorithm}
+\newtheorem*{remark}{Remark}
+\newtheorem*{theorem}{Theorem}
+
+
+
+\usepackage{titlesec}
+% {left}{before-sep}{after-sep}
+\titlespacing*{\section}{0pt}{1.2ex plus .2ex minus .2ex}{0.8ex plus .1ex}
+\titlespacing*{\subsection}{0pt}{1.0ex plus .2ex minus .2ex}{0.5ex plus .1ex}
+
+\usepackage{enumitem}
+\setlist{nosep} % Removes all vertical space between list items and around lists
+
+
+
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+\usepackage{marginnote} 
+\newcommand{\sid}[1]{%
+    \marginnote{\tiny\raggedright\color{red}\textbf{SB:} #1}%
+}
+
+
+\title{Certification of True QBF Formulas in Expansion-Based Solving}
+\author{
+  Sidhant Bhavnani, Clemens Hofstadler, Martina Seidl \\
+  \texttt{\{first\_name.last\_name\}@jku.at} \\
+  Johannes Kepler University Linz, Austria \\
+}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+\begin{abstract}
+    Expansion-based QBF solvers effectively decide false instances via universal expansion, yet the dual approach—deciding true instances via existential expansion—is less explored. This is because eliminating existential variables yields non-CNF formulas containing only universal variables, which standard SAT solvers cannot directly process. Consequently, certifying true results has remained an open problem. In this work, we present a proof format and checking algorithm for certifying true QBFs in the expansion-based setting, identifying and overcoming the core obstacles of non-clausal, universal-only expansions.
+\end{abstract}
+
+
+\section{Motivation}
+
+Quantified Boolean formulas (QBFs) extend propositional logic with universal and
+existential quantifiers, providing a natural encoding for problems in formal
+verification, synthesis, and games~\cite{survey}. The QBF decision problem
+is PSPACE-complete~\cite{survey}. Expansion-based solving is one of the two dominant
+QBF solving paradigms, reducing the decision problem to propositional
+satisfiability by eliminating quantifiers and delegating to a SAT solver.
+Existing certification frameworks for expansion-based solving, such as
+FERPModels~\cite{ferpmodels} and FERAT~\cite{ferat}, target only false QBFs via universal
+expansion. Certifying true QBFs via existential expansion has remained an open
+problem.
+
+We present a proof format and checking algorithm for certifying true QBFs in the
+expansion-based setting. Section~\ref{sec:preliminaries} establishes the necessary
+background on expansion-based solving and existing certification frameworks.
+Section~\ref{sec:existential} introduces existential expansion and the structural
+difficulties it poses. Section~\ref{sec:challenge} identifies the two core
+certification obstacles. Section~\ref{sec:format} presents the proof format and
+the \textsc{CheckExpansion} algorithm.
+
+\section{Preliminaries}
+\label{sec:preliminaries}
+A \emph{quantified Boolean formula} (QBF) in prenex conjunctive normal form (PCNF)
+is a formula $\Phi = \Pi.\phi$, where the \emph{prefix} $\Pi = Q_1x_1\cdots Q_nx_n$
+is a sequence of quantifier bindings with $Q_i \in \{\forall, \exists\}$, and the
+\emph{matrix} $\phi$ is a propositional formula in CNF. We write $U_\Pi$ and $E_\Pi$
+for the sets of universal and existential variables of $\Pi$ respectively, and
+$<_\Pi$ for the quantifier order induced by $\Pi$.
+
+A \emph{universal assignment} $\alpha$ is a total assignment to $U_\Pi$. The
+\emph{instantiation} $\phi^\alpha$ is obtained by substituting each universal
+variable with its value under $\alpha$, replacing each remaining existential
+variable $e$ with a fresh \emph{annotated copy} $e^\tau$ where $\tau$ is the
+restriction of $\alpha$ to $\{u \in U_\Pi \mid u <_\Pi e\}$, and simplifying. A
+\emph{partial universal expansion} over a finite set $A$ of universal assignments
+is the conjunction
+\[
+    \psi_\forall = \bigwedge_{\alpha \in A} \phi^\alpha.
+\]
+Since $\phi$ is in CNF, so is each $\phi^\alpha$, and hence so is $\psi_\forall$.
+A QBF $\Phi$ is \emph{false} if and only if there exists a finite $A$ such that
+$\psi_\forall$ is unsatisfiable~\cite{itjihad}.
+
+\begin{example}
+    \label{ex:running-false}
+    Let $\Phi^\bot = \exists x \forall a \exists y.\, \phi^\bot$ where
+    \[
+        \phi^\bot = (x \vee a \vee y) \wedge (\neg x \vee \neg a \vee y) \wedge
+        (\neg y).
+    \]
+    $\Phi^\bot$ is false. Expanding over $\alpha = \{a \leftarrow 0\}$ and $\alpha
+        = \{a \leftarrow 1\}$ yields
+    \[
+        \psi_\forall = (x \vee y^0) \wedge (\neg y^0) \wedge (\neg x \vee y^1)
+        \wedge (\neg y^1) = \bot
+    \]
+    where $y^0$ and $y^1$ are annotated copies of $y$ under $a \leftarrow 0$ and
+    $a \leftarrow 1$ respectively.
+\end{example}
+
+When $\psi_\forall$ is passed to a SAT solver, the annotated variables lose their
+connection to the original QBF variables. Expansion-based certification
+frameworks~\cite{ferpmodels,ferat} restore this connection via two proof components:
+\emph{expansion map} $\varepsilon$ mapping each proof variable to its annotated
+QBF counterpart, encoded as \texttt{x} lines, and an \emph{origin map} recording
+the originating matrix clause for each expansion clause, encoded as a single
+\texttt{o} line. Figure~\ref{fig:false-proof} shows the QDIMACS file and the
+expansion part of the proof file for $\Phi^\bot$.
+
+\begin{figure}[t]
+    \centering
+    \begin{minipage}{0.45\columnwidth}
+        \begin{mdframed}
+            \begin{verbatim}
+p cnf 3 3
+e 1 0
+a 2 0
+e 3 0
+1 2 3 0
+-1 -2 3 0
+-3 0
+
+\end{verbatim}
+        \end{mdframed}
+        \subcaption{QDIMACS file for $\Phi^\bot$.}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.45\columnwidth}
+        \begin{mdframed}
+            \begin{verbatim}
+x 1 0 1 0 0
+x 3 0 3 0 -2 0
+x 2 0 3 0 2 0
+o 2 3 1 3 0
+-1 2 0
+-2 0
+1 3 0
+-3 0
+\end{verbatim}
+        \end{mdframed}
+        \subcaption{Proof file for $\Phi^\bot$.}
+    \end{minipage}
+    \caption{QDIMACS and proof file for $\Phi^\bot$
+        (Example~\ref{ex:running-false}).}
+    \label{fig:false-proof}
+\end{figure}
+
+Variable \texttt{1} maps to $x$ with no annotation; variable \texttt{3} maps to
+$y$ annotated by $a \leftarrow 0$; and variable \texttt{2} maps to $y$ annotated
+by $a \leftarrow 1$. The \texttt{o} line records that the four expansion clauses
+originate from matrix clauses \texttt{2}, \texttt{3}, \texttt{1}, and \texttt{3}
+respectively. Given $\varepsilon$ and the origin map, the checker verifies
+that each expansion clause is a legal instantiation of its originating matrix
+clause under the recorded universal assignment, and delegates the refutation
+checking of $\psi_\forall$ to a SAT solver and an external proof checker.
+
+\section{Existential Expansion based Solving}
+\label{sec:existential}
+An \emph{existential assignment} $\sigma$ is a total assignment to $E_\Pi$. Given
+$\sigma$, the \emph{instantiation} $\phi^\sigma$ is obtained by substituting each
+existential variable with its value under $\sigma$, replacing each remaining
+universal variable $a$ with a fresh \emph{annotated copy} $a^\tau$ where $\tau$ is
+the restriction of $\sigma$ to $\{e \in E_\Pi \mid e <_\Pi a\}$, and simplifying.
+A \emph{partial existential expansion} over a finite set $S$ of existential
+assignments is the disjunction
+\[
+    \psi_\exists = \bigvee_{\sigma \in S} \phi^\sigma.
+\]
+A QBF $\Phi$ is \emph{true} if and only if there exists a finite $S$ such that
+$\psi_\exists$ is valid~\cite{itjihad}, i.e.,
+\[
+    \forall \beta : U_\Pi \to \mathbb{B},\ \psi_\exists[\beta] = \top.
+\]
+Since validity of $\psi_\exists$ is equivalent to unsatisfiability of its negation,
+\[
+    \neg\psi_\exists = \bigwedge_{\sigma \in S} \neg\phi^\sigma,
+\]
+truth of $\Phi$ reduces to a SAT check on $\neg\psi_\exists$.
+
+
+We now introduce the true QBF that serves as our running example for the remainder
+of the paper.
+
+\begin{example}
+    \label{ex:running-true}
+    Let $\Phi = \forall a_1 \exists e_2 \forall a_3 a_4 \exists e_5 e_6.\, \phi$
+    where
+    \begin{align*}
+        \phi = \; & (\neg e_5 \vee \neg a_1 \vee a_4) \wedge
+        (\neg e_5 \vee \neg e_2) \wedge
+        (\neg e_5 \vee \neg a_3) \;\wedge                    \\
+                  & (\neg e_6 \vee a_1) \wedge
+        (\neg e_6 \vee e_2) \wedge
+        (\neg e_6 \vee \neg a_3) \wedge
+        (e_5 \vee e_6 \vee a_3).
+    \end{align*}
+    $\Phi$ is true.
+\end{example}
+
+
+The solver constructs a set $S$ of existential assignments and computes the
+corresponding instantiations. For $\Phi$, the four non-trivial branches are:
+\begin{align*}
+    \phi^{000} & = (a_3^0) \qquad & \phi^{010} & = (\neg a_1 \vee a_4^0) \wedge (\neg a_3^0) \\
+    \phi^{100} & = (a_3^1) \qquad & \phi^{101} & = (a_1) \wedge (\neg a_3^1)
+\end{align*}
+where the superscript on each annotated variable records the restriction of $\sigma$
+to the existential variables to its left in $\Pi$. The partial existential expansion
+is the disjunction
+\[
+    \psi_\exists = \phi^{000} \vee \phi^{010} \vee \phi^{100} \vee \phi^{101}.
+\]
+
+To check validity of $\psi_\exists$ via a SAT solver, we negate it to obtain
+\[
+    \neg\psi_\exists = \neg\phi^{000} \wedge \neg\phi^{010} \wedge \neg\phi^{100}
+    \wedge \neg\phi^{101}.
+\]
+Since each $\phi^\sigma$ is in CNF, each $\neg\phi^\sigma$ is in DNF. For example,
+\[
+    \neg\phi^{010} = \neg(\neg a_1 \vee a_4^0) \vee \neg(\neg a_3^0)
+    = (a_1 \wedge \neg a_4^0) \vee a_3^0,
+\]
+which is not clausal. Thus $\neg\psi_\exists$ is a conjunction of DNF formulas and  cannot be passed directly to a SAT solver.
+
+To obtain an equisatisfiable CNF without exponential blowup, the solver applies the
+Plaisted--Greenbaum (PG) transformation~\cite{pg} to each negated branch $\neg\phi^\sigma$.
+For each clause $C_i \in \phi^\sigma$ with more than one literal, a fresh
+\emph{auxiliary variable} $t_i$ is introduced satisfying $t_i \Rightarrow \neg C_i$,
+contributing \emph{helper clauses}
+\[
+    H_i^\sigma = \{(t_i \vee \neg l) \mid l \in C_i\}.
+\]
+The negated branch $\neg\phi^\sigma$ is then encoded as a single \emph{NAND clause}
+\[
+    N^\sigma = (\neg\langle C_1 \rangle \vee \cdots \vee \neg\langle C_m \rangle)
+\]
+where $\langle C_i \rangle = t_i$ if $|C_i| > 1$ and $\langle C_i \rangle = l$ for
+the unique literal $l \in C_i$ otherwise. The CNF formula passed to the SAT solver
+is then
+\[
+    \psi_F = \bigwedge_{\sigma \in S} \left( N^\sigma \wedge \bigwedge_{|C_i|>1} H_i^\sigma \right).
+\]
+The auxiliary variables $t_i$ have no counterpart in $\phi$, and the NAND clause
+$N^\sigma$ maps to multiple matrix clauses rather than one. This is the structure
+the checker must accommodate.
+
+Applying the PG transformation to $\Phi$, the negated branch $\neg\phi^{010}$
+contains two clauses, $(\neg a_1 \vee a_4^0)$ and $(\neg a_3^0)$. The first has
+more than one literal, so a fresh auxiliary variable $t_1$ is introduced, yielding
+the helper clauses
+\[
+    H_1^{010} = (t_1 \vee a_1) \wedge (t_1 \vee \neg a_4^0)
+\]
+and the NAND clause
+\[
+    N^{010} = (\neg t_1 \vee a_3^0).
+\]
+The remaining branches $\phi^{000}$, $\phi^{100}$, and $\phi^{101}$ contain only
+single-literal clauses, so no auxiliary variables are introduced and their NAND
+clauses are
+\[
+    N^{000} = (\neg a_3^0), \quad N^{100} = (\neg a_3^1), \quad
+    N^{101} = (\neg a_1 \vee a_3^1).
+\]
+The CNF formula passed to the SAT solver is therefore
+\[
+    \psi_F = N^{000} \wedge (N^{010} \wedge H_1^{010}) \wedge N^{100} \wedge N^{101}.
+\]
+
+
+\section{The Certification Challenge}
+\label{sec:challenge}
+
+Certifying the result of an expansion-based solver requires two things:
+\begin{itemize}
+    \item \emph{Correspondence}: a mapping between the clauses of the propositional
+          formula passed to the SAT solver and the matrix clauses of $\phi$.
+    \item \emph{Completeness}: a completeness check verifying that every matrix
+          clause $C_i \in \phi$ is either accounted for by the expansion or
+          satisfies $C_i^\sigma = \top$.
+\end{itemize}
+In the false case, correspondence is established clause by clause: the origin map
+identifies which matrix clause each expansion clause was derived from, and
+$\varepsilon$ maps each proof variable back to its annotated QBF counterpart,
+allowing the checker to verify that each expansion clause is a legal instantiation
+of its originating matrix clause under the recorded universal assignment.
+Completeness is not a concern: it suffices to exhibit a subset of the universal
+expansion that is unsatisfiable, as adding further clauses cannot change
+unsatisfiability. In the true case, neither hold.
+
+\begin{remark}[Broken Correspondence]
+    \label{rem:correspondence}
+    The PG transformation breaks the one-to-one correspondence between proof
+    clauses and matrix clauses. Each NAND clause $N^\sigma$ maps to multiple
+    matrix clauses, and the auxiliary variables $t_i$ have no counterpart in
+    $\phi$. The checker cannot establish correspondence clause by clause as in
+    the false case.
+\end{remark}
+
+\begin{remark}[Annotation Incompleteness]
+    \label{rem:annotation}
+    In the universal case, universal reduction guarantees the innermost quantifier
+    block is always existential, so every existential variable has at least one
+    universal variable to its left in $\Pi$ and receives a non-empty annotation.
+    The full universal assignment $\alpha$ is therefore recoverable locally from
+    the annotations on any single clause. In the true case, when the innermost
+    quantifier block is existential, those existential variables annotate nothing
+    --- their annotated copies carry an empty annotation $e^{\emptyset}$,
+    indistinguishable from one another. The expansion map $\varepsilon$ alone does
+    not determine $\sigma$, and the completeness check cannot be discharged.
+\end{remark}
+
+The two obstacles are interrelated. Broken correspondence means the checker cannot
+determine which matrix clauses are accounted for by the expansion. Annotation
+incompleteness means the checker cannot recover the full existential assignment
+$\sigma$ needed to verify that the remaining clauses satisfy $C_i^\sigma = \top$.
+Together, they prevent the completeness check from being discharged without
+additional information supplied explicitly in the proof.
+
+Consider the branch $\sigma = \{e_2 \leftarrow 0, e_5 \leftarrow 1, e_6
+    \leftarrow 0\}$ for our running example $\Phi$, as derived in
+Section~\ref{sec:existential}. The NAND clause $N^\sigma = (\neg t_1 \vee a_3^0)$
+accounts for matrix clauses $C_1 = (\neg e_5 \vee \neg a_1 \vee a_4)$ and $C_7
+    = (e_5 \vee e_6 \vee a_3)$. The remaining matrix clauses $C_2, C_3, C_4, C_5,
+    C_6$ are not accounted for and must therefore satisfy $C_i^\sigma = \top$. For
+example, $C_4 = (\neg e_6 \vee a_1)$ is eliminated because $e_6 \leftarrow 0
+    \in \sigma$, satisfying $\neg e_6$. The proof format must therefore supply
+additional information to bridge this gap.
+
+
+\section{Proof Format and \textsc{CheckExpansion}}
+\label{sec:format}
+
+The proof must provide enough information to address both obstacles identified in
+Section~\ref{sec:challenge}. Figure~\ref{fig:proof} shows the QDIMACS file and
+the proof file for our running example $\Phi$. The proof consists of three line
+types:
+\begin{itemize}
+    \item \texttt{x} lines encode the expansion map $\varepsilon$, mapping each
+          proof variable to its annotated QBF counterpart. For example, \texttt{x 2 3
+              0 3 4 0 2 0} records that proof variables \texttt{2} and \texttt{3} map to
+          QBF variables \texttt{3} and \texttt{4} respectively, annotated by $e_2
+              \leftarrow 1$.
+    \item \texttt{n} lines encode NAND clause proof lines of the form
+          \[
+              \texttt{n} \;
+              \underbrace{l_1 \cdots l_k}_{N^\sigma} \; 0 \;
+              \underbrace{i_1 \cdots i_k}_{\eta_N} \; 0 \;
+              \underbrace{\omega^\sigma}_{\text{witness}} \; 0
+          \]
+          where $l_1, \ldots, l_k$ are the literals of $N^\sigma$, $i_1, \ldots,
+              i_k$ are the indices of their originating matrix clauses, and $\omega^\sigma$
+          is the complete existential witness for branch $\sigma$. For example,
+          \texttt{n 7 -3 0 1 7 0 -2 5 -6 0} encodes the NAND clause for branch
+          $\sigma = \{e_2 \leftarrow 0, e_5 \leftarrow 1, e_6 \leftarrow 0\}$:
+          literals \texttt{7} and \texttt{-3} are mapped to matrix clauses \texttt{1}
+          and \texttt{7} respectively, and \texttt{-2 5 -6} is the witness
+          $\omega^\sigma$.
+    \item \texttt{h} lines encode helper clauses $H_i^\sigma$, one per multi-literal
+          clause $C_i \in \phi^\sigma$, encoding the auxiliary variable definitions
+          from the PG transformation. For example, \texttt{h 7 1 0} and \texttt{h 7
+              -4 0} encode $H_1^\sigma$, the definition of auxiliary variable $t_1$
+          introduced for clause $C_1 = (\neg e_5 \vee \neg a_1 \vee a_4)$.
+\end{itemize}
+
+\begin{figure}[t]
+    \centering
+    \begin{minipage}{0.45\columnwidth}
+        \begin{mdframed}
+            \begin{verbatim}
+p cnf 6 7
+a 1 0
+e 2 0
+a 3 4 0
+e 5 6 0
+-5 -1 4 0
+-5 -2 0
+-5 -3 0
+-6 1 0
+-6 2 0
+-6 -3 0
+5 6 3 0
+\end{verbatim}
+        \end{mdframed}
+        \subcaption{QDIMACS file for $\Phi$.}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.45\columnwidth}
+        \begin{mdframed}
+            \begin{verbatim}
+x 1 0 1 0 0
+x 2 3 0 3 4 0 2 0
+x 4 5 0 3 4 0 -2 0
+n -3 0 7 0 -2 -5 -6 0
+n 7 -3 0 1 7 0 -2 5 -6 0
+h 7 1 0
+h 7 -4 0
+n -3 0 7 0 2 -5 -6 0
+n -1 3 0 4 7 0 2 -5 6 0
+\end{verbatim}
+        \end{mdframed}
+        \subcaption{Proof file for $\Phi$.}
+    \end{minipage}
+    \caption{QDIMACS and proof file for the running example $\Phi$
+        (Example~\ref{ex:running-true}).}
+    \label{fig:proof}
+\end{figure}
+
+\subsection{\textsc{CheckExpansion}}
+
+The function $\mathrm{annotation}(v^\tau) = \tau$ extracts the annotation $\tau$
+from an annotated variable $v^\tau$, treating it as a set of signed literals over
+$E_\Pi$. We extend $\varepsilon$ to sets of literals pointwise: $\varepsilon(L) =
+    \{\varepsilon(l) \mid l \in L\}$.
+
+Given the proof, \textsc{CheckExpansion} iterates over every NAND clause $N^\sigma$
+and performs three steps:
+\begin{enumerate}
+    \item \emph{Check Literals}: for each literal $l \in N^\sigma$, retrieve the
+          originating matrix clause $C_i = \phi[\eta_N(l)]$. Here $\mathrm{universal}
+              (C_i)$ denotes the set of universal literals of $C_i$ as they appear in
+          $\phi$. If $l$ is an auxiliary variable $t_i$, first verify that the helper
+          clauses $H_i^\sigma$ correctly encode $t_i \Rightarrow \neg C_i$ under
+          $\varepsilon$, then collect the non-auxiliary literals of $H_i^\sigma$;
+          otherwise use $l$ directly. Rename the collected literals via $\varepsilon$,
+          stripping annotations to recover plain QBF variables, and verify they match
+          $\mathrm{universal}(C_i)$. Accumulate the existential annotations into a
+          partial witness $\omega_{\mathrm{partial}}$ via $\mathrm{annotation}(\cdot)$,
+          where $\mathrm{annotation}(v^\tau) = \tau$ extracts $\tau$ as a set of signed
+          literals over $E_\Pi$.
+    \item \emph{Validate Witness}: extend $\omega_{\mathrm{partial}}$ with the
+          supplied witness $\omega^\sigma$, verifying that $\omega^\sigma$ is
+          consistent with $\omega_{\mathrm{partial}}$, that all variables in
+          $\omega^\sigma$ are existential variables of $\Pi$, and that the result
+          $\omega$ satisfies $\mathrm{dom}(\omega) = E_\Pi$.
+    \item \emph{Check Elimination}: for every matrix clause $C_i \in \phi$ not
+          referenced by $\eta_N$, verify that $C_i^{\omega} = \top$, i.e., at
+          least one existential literal of $C_i$ is satisfied by $\omega$.
+\end{enumerate}
+
+\begin{algorithm}
+    \caption{\textsc{CheckExpansion}}
+    \begin{algorithmic}[1]
+        \REQUIRE QBF $\Pi.\phi$, proof with $\varepsilon$, NAND clauses, helper
+        clauses, $\eta_N$, witnesses $\omega^\sigma$
+        \ENSURE \textit{true} if all NAND clauses are valid, \textit{false} otherwise
+
+        \FOR{each NAND clause $N^\sigma$ in proof}
+
+        \STATE $\omega_{\mathrm{partial}} \leftarrow \emptyset$
+
+        \STATE $\triangleright$ \textit{Step 1 --- Check Literals}
+        \FOR{each $l \in N^\sigma$}
+        \STATE $C_i \leftarrow \phi[\eta_N(l)]$
+        \IF{$\textsc{IsAuxiliary}(l)$}
+        \STATE $\mathit{lits} \leftarrow \textsc{GetNonAuxiliaryLiterals}(H_i^\sigma)$
+        \ELSE
+        \STATE $\mathit{lits} \leftarrow \{l\}$
+        \ENDIF
+        \IF{$\varepsilon(\mathit{lits}) \neq \mathrm{universal}(C_i)$}
+        \RETURN \textit{false}
+        \ENDIF
+        \STATE $\omega_{\mathrm{partial}} \leftarrow \omega_{\mathrm{partial}}
+            \cup \{\mathrm{annotation}(k) \mid k \in \mathit{lits}\}$
+        \ENDFOR
+
+        \STATE $\triangleright$ \textit{Step 2 --- Validate Witness}
+        \FOR{each $l \in \omega^\sigma$}
+        \IF{$\mathrm{Var}(l) \notin E_\Pi$}
+        \RETURN \textit{false}
+        \ENDIF
+        \IF{$\neg l \in \omega_{\mathrm{partial}}$}
+        \RETURN \textit{false}
+        \ENDIF
+        \STATE $\omega_{\mathrm{partial}} \leftarrow \omega_{\mathrm{partial}} \cup \{l\}$
+        \ENDFOR
+        \IF{$\mathrm{dom}(\omega_{\mathrm{partial}}) \neq E_\Pi$}
+        \RETURN \textit{false}
+        \ENDIF
+        \STATE $\omega \leftarrow \omega_{\mathrm{partial}}$
+
+        \STATE $\triangleright$ \textit{Step 3 --- Check Elimination}
+        \FOR{each $C_i \in \phi$ not referenced by $\eta_N$}
+        \IF{$C_i^\omega \neq \top$}
+        \RETURN \textit{false}
+        \ENDIF
+        \ENDFOR
+
+        \ENDFOR
+        \RETURN \textit{true}
+    \end{algorithmic}
+\end{algorithm}
+
+The origin map $\eta_N$ and helper clauses $H_i^\sigma$ resolve broken
+correspondence by restoring a clause-level mapping to $\phi$. The witness
+$\omega^\sigma$ resolves annotation incompleteness by supplying the full
+existential assignment required to discharge the completeness check.
+
+
+
+\section{Conclusion}\label{sec:conclusion}
+We have presented a proof format and checking algorithm for certifying true QBFs
+in the expansion-based setting. The two core obstacles --- broken correspondence
+introduced by the Plaisted--Greenbaum transformation, and annotation incompleteness
+arising when the innermost quantifier block is existential --- are addressed by
+augmenting the expansion proof with an origin map $\eta_N$, helper clauses
+$H_i^\sigma$, and a per-branch existential witness $\omega^\sigma$. The
+\textsc{CheckExpansion} algorithm verifies each NAND clause in three steps,
+culminating in a completeness check that enforces the key invariant: every matrix
+clause is either referenced by a NAND clause or eliminated by the witness.
+
+Several directions remain for future work. The proof format and
+\textsc{CheckExpansion} algorithm presented here provide the theoretical foundation
+for a practical proof checker; implementing and evaluating this checker on
+expansion-based QBF benchmarks is a natural next step. Beyond certification,
+FERPModels already supports Herbrand function extraction for false QBFs; extending
+this to Skolem function extraction for true QBFs from verified existential
+expansion proofs would provide concrete witnesses to the truth of a QBF,
+broadening the utility of expansion-based certification in synthesis and
+verification applications.
+
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}
